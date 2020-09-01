@@ -1,0 +1,1 @@
+mpic++  -g   CMakeFiles/orb.dir/main.cpp.o  -o orb   -L/home/xetql/cpp/orb/yalbb/lib 

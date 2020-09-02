@@ -5,7 +5,10 @@
 #include <mpi.h>
 #include <array>
 #include <algorithm>
+
+#include <boost/geometry.hpp>
 #include <yalbb/parallel_utils.hpp>
+
 using namespace std;
 using Real = float;
 
@@ -28,21 +31,13 @@ std::pair<array<Real, N>, array<Real, N>> get_dimension_size(vector<T>& p, GetPo
     return { max_by_dim, min_by_dim };
 }
 template<int N> using Subdomain = std::array<Real, 2*N>;
-#include <boost/geometry.hpp>
 
 template<int N>
 struct ORBBalancer {
     typedef boost::geometry::model::point<Real, N, boost::geometry::cs::cartesian> point_t;
     typedef boost::geometry::model::box<point_t> box_t;
     inline box_t domain_to_box(const Subdomain<N>& domain){
-        box_t box;
-        box.min_corner().set<0>(domain.at(0));
-        box.min_corner().set<1>(domain.at(2));
-        if constexpr(N==3) box.min_corner().set<2>(domain.at(4));
-        box.max_corner().set<0>(domain.at(1));
-        box.max_corner().set<1>(domain.at(3));
-        if constexpr(N==3) box.max_corner().set<2>(domain.at(5));
-        return box;
+        return box_t(point_t(domain.at(0), domain.at(2), domain.at(3)), point_t(domain.at(1), domain.at(3), domain.at(5)));
     }
     std::vector<Subdomain<N>> partitions;
     void lookup_domain(std::array<Real, N>* pos, int PE);
@@ -126,6 +121,8 @@ int main(int argc, char** argv) {
     int worldsize,r;
     MPI_Comm_size(MPI_COMM_WORLD, &worldsize);
     MPI_Comm_rank(MPI_COMM_WORLD, &r);
+    ORBBalancer<3> lb;
+
     std::vector<Particle> particles( r == 1? 0 : 100 );
     MPI_Datatype vec;
     MPI_Type_contiguous(3, par::get_mpi_type<Real>(), &vec);
@@ -134,7 +131,7 @@ int main(int argc, char** argv) {
 
     generate(begin(particles), end(particles), RandomParticleGenerator());
 
-    orb<3>(particles, {0.0,1.0, 0.0,1.0, 0.0,1.0}, worldsize, [](Particle* p){ return &p->position;}, vec, MPI_COMM_WORLD);
+    orb<3>(lb, particles, {0.0,1.0, 0.0,1.0, 0.0,1.0}, worldsize, [](Particle* p){ return &p->position;}, vec, MPI_COMM_WORLD);
 
     cout << particles.size() << endl;
 

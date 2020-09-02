@@ -13,4 +13,4 @@ include_directories(yalbb/includes)
 include_directories(${BOOST_INCLUDE_DIRS})
 add_executable(orb main.cpp)
 
-target_link_libraries(orb PUBLIC /home/xetql/cpp/orb/yalbb/lib/libyalbb.a ${BOOST_LIBRARIES})
+target_link_libraries(orb PUBLIC ${CMAKE_CURRENT_LIST_DIR}/yalbb/lib/libyalbb.a ${BOOST_LIBRARIES})

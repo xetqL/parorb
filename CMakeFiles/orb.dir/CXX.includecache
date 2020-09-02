@@ -6,11 +6,11 @@
 
 #IncludeRegexTransform: 
 
-/home/xetql/cpp/orb/main.cpp
+/home/xetql/parorb/main.cpp
 iostream
 -
 median.hpp
-/home/xetql/cpp/orb/median.hpp
+/home/xetql/parorb/median.hpp
 vector
 -
 mpi.h
@@ -18,6 +18,8 @@ mpi.h
 array
 -
 algorithm
+-
+boost/geometry.hpp
 -
 yalbb/parallel_utils.hpp
 -
@@ -32,6 +34,12 @@ vector
 mpi.h
 -
 random
+-
+iostream
+-
+iterator
+-
+algorithm
 -
 
 yalbb/includes/yalbb/cll.hpp

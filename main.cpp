@@ -34,6 +34,11 @@ template<int N> using Subdomain = std::array<Real, 2*N>;
 
 template<int N>
 struct ORBBalancer {
+
+    const MPI_Comm comm;	
+    
+    ORBBalancer(MPI_Comm comm = MPI_COMM_WORLD): comm(comm){}
+
     typedef boost::geometry::model::point<Real, N, boost::geometry::cs::cartesian> point_t;
     typedef boost::geometry::model::box<point_t> box_t;
     inline box_t domain_to_box(const Subdomain<N>& domain){
@@ -41,7 +46,7 @@ struct ORBBalancer {
     }
     std::vector<Subdomain<N>> partitions;
     void lookup_domain(std::array<Real, N>* pos, int PE);
-    std::vector<int> get_neighbors(int PE, double min_distance, MPI_Comm comm) {
+    std::vector<int> get_neighbors(int PE, double min_distance) {
         int worldsize;
         std::vector<int> neighbors;
         MPI_Comm_size(comm, &worldsize);
@@ -100,7 +105,7 @@ void orb(ORBBalancer<N>& lb, vector<T>& elements, std::array<Real, 2*N> box, uns
         domains = std::move(subdomains);
         domains_data = std::move(subdomains_data);
     }
-    do_migration(0, elements, domains_data, datatype, comm);
+    do_migration<T>(0, elements, domains_data, datatype, comm);
     lb.partitions = domains;
 }
 
@@ -121,7 +126,7 @@ int main(int argc, char** argv) {
     int worldsize,r;
     MPI_Comm_size(MPI_COMM_WORLD, &worldsize);
     MPI_Comm_rank(MPI_COMM_WORLD, &r);
-    ORBBalancer<3> lb;
+    ORBBalancer<3> lb(MPI_COMM_WORLD);
 
     std::vector<Particle> particles( r == 1? 0 : 100 );
     MPI_Datatype vec;
@@ -134,6 +139,9 @@ int main(int argc, char** argv) {
     orb<3>(lb, particles, {0.0,1.0, 0.0,1.0, 0.0,1.0}, worldsize, [](Particle* p){ return &p->position;}, vec, MPI_COMM_WORLD);
 
     cout << particles.size() << endl;
+
+    auto neigh = lb.get_neighbors(r, 0.1);
+    if(!r) copy(neigh.begin(), neigh.end(), ostream_iterator<int>(cout, " "));
 
     MPI_Finalize();
     return 0;

@@ -1,1 +1,1 @@
-mpic++  -g   CMakeFiles/orb.dir/main.cpp.o  -o orb  yalbb/lib/libyalbb.a 
+mpic++ CMakeFiles/orb.dir/main.cpp.o -o orb  yalbb/lib/libyalbb.a 

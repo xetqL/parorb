@@ -1,3 +1,3 @@
-/home/xetql/parorb/CMakeFiles/rebuild_cache.dir
-/home/xetql/parorb/CMakeFiles/edit_cache.dir
-/home/xetql/parorb/CMakeFiles/orb.dir
+/home/xetql/cpp/orb/CMakeFiles/edit_cache.dir
+/home/xetql/cpp/orb/CMakeFiles/rebuild_cache.dir
+/home/xetql/cpp/orb/CMakeFiles/orb.dir

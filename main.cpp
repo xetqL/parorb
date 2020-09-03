@@ -41,11 +41,41 @@ struct ORBBalancer {
 
     typedef boost::geometry::model::point<Real, N, boost::geometry::cs::cartesian> point_t;
     typedef boost::geometry::model::box<point_t> box_t;
-    inline box_t domain_to_box(const Subdomain<N>& domain){
-        return box_t(point_t(domain.at(0), domain.at(2), domain.at(3)), point_t(domain.at(1), domain.at(3), domain.at(5)));
+    inline point_t array_to_point(const std::array<Real, N>& pos) {
+        if constexpr(N==3)
+            return point_t(pos.at(0), pos.at(1), pos.at(2));
+        else
+            return point_t(pos.at(0), pos.at(1));
     }
+    inline box_t domain_to_box(const Subdomain<N>& domain){
+        if constexpr(N==3)
+            return box_t(point_t(domain.at(0), domain.at(2), domain.at(3)), point_t(domain.at(1), domain.at(3), domain.at(5)));
+        else
+            return box_t(point_t(domain.at(0), domain.at(2)), point_t(domain.at(1), domain.at(3)));
+    }
+
     std::vector<Subdomain<N>> partitions;
-    void lookup_domain(std::array<Real, N>* pos, int PE);
+    void lookup_domain(const point_t& p, int* PE) {
+        for((*PE) = partitions.size()-1; (*PE) > -1; (*PE)--) {
+            if (boost::geometry::covered_by(p, domain_to_box(partitions.at((*PE))))) return;
+        }
+    }
+    void lookup_domain(std::array<Real, N>* pos, int* PE) {
+        auto point = array_to_point(*pos);
+        lookup_domain(point, PE);
+    }
+    void lookup_domain(const std::array<Real, N>& pos, int* PE) {
+        auto point = array_to_point(pos);
+        lookup_domain(point, PE);
+    }
+    void lookup_domain(const std::array<Real, N>&& pos, int* PE) {
+        auto point = array_to_point(pos);
+        lookup_domain(point, PE);
+    }
+    template<class T, class GetPosF>
+    void lookup_domain(T* p, int* PE, GetPosF getPosition) {
+        lookup_domain(getPosition(p), PE);
+    }
     std::vector<int> get_neighbors(int PE, double min_distance) {
         int worldsize;
         std::vector<int> neighbors;
@@ -56,14 +86,13 @@ struct ORBBalancer {
             if(PE != i && std::abs(boost::geometry::distance(targeted_box, current_box)) < min_distance){
                 neighbors.push_back(i);
             }
-
         }
         return neighbors;
     }
 };
 
 template<int N, class T, class GetPosF>
-void orb(ORBBalancer<N>& lb, vector<T>& elements, std::array<Real, 2*N> box, unsigned int P, GetPosF getPosition, MPI_Datatype datatype, MPI_Comm comm) {
+void orb(ORBBalancer<N>& lb, vector<T>& elements, Subdomain<N> box, unsigned int P, GetPosF getPosition, MPI_Datatype datatype, MPI_Comm comm) {
     const size_t size   = elements.size();
     const size_t nparts = size / N;
 
@@ -71,7 +100,7 @@ void orb(ORBBalancer<N>& lb, vector<T>& elements, std::array<Real, 2*N> box, uns
     std::vector< Subdomain<N> > domains;
     std::vector< std::vector<T>  > domains_data { std::move(elements) };
     domains.emplace_back( box );
-    while(domains.size() <= ncuts) {
+    while(ncuts--) {
         std::vector< Subdomain<N> > subdomains; subdomains.reserve(2*domains.size());
         std::vector< std::vector<T>  > subdomains_data; subdomains_data.reserve(2*domains_data.size());
         //for(const auto& d : domains) {
@@ -106,42 +135,70 @@ void orb(ORBBalancer<N>& lb, vector<T>& elements, std::array<Real, 2*N> box, uns
         domains_data = std::move(subdomains_data);
     }
     do_migration<T>(0, elements, domains_data, datatype, comm);
+
     lb.partitions = domains;
 }
 
+template<int N>
 struct Particle {
-    std::array<Real, 3> position;
+    static constexpr int ndim = N;
+    std::array<Real, N> position;
+
+    friend ostream &operator<<(ostream &os, const Particle &particle) {
+        os << std::fixed << std::setprecision(6);
+        copy(particle.position.begin(), particle.position.end(), ostream_iterator<Real>(os, " "));
+        return os;
+    }
+
 };
+
 #include <random>
 #include <cstdlib>
+template<int N>
 struct RandomParticleGenerator {
-    Particle operator()(){
-        return Particle{{(Real) std::rand() / RAND_MAX,
-                         (Real) std::rand() / RAND_MAX,
-                         (Real) std::rand() / RAND_MAX}};
+    Particle<N> operator()(){
+        if constexpr(N==3)
+            return Particle<N>{{(Real) std::rand() / RAND_MAX,
+                                (Real) std::rand() / RAND_MAX,
+                                (Real) std::rand() / RAND_MAX}};
+        else
+            return Particle<N>{{(Real) std::rand() / RAND_MAX,
+                                (Real) std::rand() / RAND_MAX}};
     }
 };
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     int worldsize,r;
+
     MPI_Comm_size(MPI_COMM_WORLD, &worldsize);
     MPI_Comm_rank(MPI_COMM_WORLD, &r);
-    ORBBalancer<3> lb(MPI_COMM_WORLD);
 
-    std::vector<Particle> particles( r == 1? 0 : 100 );
-    MPI_Datatype vec;
-    MPI_Type_contiguous(3, par::get_mpi_type<Real>(), &vec);
+    using Particle = Particle<2>;
 
-    MPI_Type_commit(&vec);
+    ORBBalancer<Particle::ndim> lb(MPI_COMM_WORLD);
 
-    generate(begin(particles), end(particles), RandomParticleGenerator());
+    std::vector<Particle> particles( r == 1? 0 : 20000 );
 
-    orb<3>(lb, particles, {0.0,1.0, 0.0,1.0, 0.0,1.0}, worldsize, [](Particle* p){ return &p->position;}, vec, MPI_COMM_WORLD);
+    MPI_Datatype particle_datatype;
+    MPI_Type_contiguous(Particle::ndim, par::get_mpi_type<Real>(), &particle_datatype);
+    MPI_Type_commit(&particle_datatype);
 
-    cout << particles.size() << endl;
+    generate(begin(particles), end(particles), RandomParticleGenerator<Particle::ndim>());
 
+    orb<Particle::ndim>(lb, particles, {0.0, 1.0, 0.0,1.0}, worldsize, [](Particle* p){ return &p->position;}, particle_datatype, MPI_COMM_WORLD);
+
+    std::ofstream f;
+    f.open(std::to_string(r) + ".particles");
+    copy(particles.begin(), particles.end(), ostream_iterator< Particle >(f, "\n") );
+    f.close();
+
+    /* get neighbors closer than 0.1 */
     auto neigh = lb.get_neighbors(r, 0.1);
-    if(!r) copy(neigh.begin(), neigh.end(), ostream_iterator<int>(cout, " "));
+
+    /* lookup the domain belonging to a particle */
+    int p;
+    lb.lookup_domain( ORBBalancer<Particle::ndim>::point_t(0.00, 0.00), &p);
+    lb.lookup_domain( &particles[0], &p, [](Particle* p){ return &p->position;});
 
     MPI_Finalize();
     return 0;

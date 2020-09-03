@@ -6,11 +6,11 @@
 
 #IncludeRegexTransform: 
 
-/home/xetql/parorb/main.cpp
+/home/xetql/cpp/orb/main.cpp
 iostream
 -
 median.hpp
-/home/xetql/parorb/median.hpp
+/home/xetql/cpp/orb/median.hpp
 vector
 -
 mpi.h

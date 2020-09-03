@@ -4,7 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_CXX
-  "/home/xetql/parorb/main.cpp" "/home/xetql/parorb/CMakeFiles/orb.dir/main.cpp.o"
+  "/home/xetql/cpp/orb/main.cpp" "/home/xetql/cpp/orb/CMakeFiles/orb.dir/main.cpp.o"
   )
 set(CMAKE_CXX_COMPILER_ID "GNU")
 

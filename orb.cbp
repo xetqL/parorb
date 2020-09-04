@@ -75,6 +75,9 @@
 		<Unit filename="/home/xetql/cpp/orb/main.cpp">
 			<Option target="orb"/>
 		</Unit>
+		<Unit filename="/home/xetql/cpp/orb/orb.hpp">
+			<Option target="orb"/>
+		</Unit>
 		<Unit filename="/home/xetql/cpp/orb/CMakeLists.txt">
 			<Option virtualFolder="CMake Files\"/>
 		</Unit>

@@ -12,3 +12,6 @@ CTestTestfile.cmake
 _deps
 *.particles
 *.txt
+*.cbp
+.idea
+

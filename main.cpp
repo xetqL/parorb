@@ -1,13 +1,9 @@
 
 #include <iostream>
-#include "median.hpp"
 #include <vector>
 #include <mpi.h>
 #include <array>
 #include <algorithm>
-
-#include <boost/geometry.hpp>
-#include <yalbb/parallel_utils.hpp>
 
 using namespace std;
 using Real = float;
@@ -44,8 +40,10 @@ struct ParticlePositionGetter {
         return &p->position;
     }
 };
+
 #include "orb.hpp"
 using namespace orb;
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     int worldsize,r;

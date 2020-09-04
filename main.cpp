@@ -4,7 +4,8 @@
 #include <mpi.h>
 #include <array>
 #include <algorithm>
-
+#include <iterator>
+#include <iomanip>
 using namespace std;
 using Real = float;
 

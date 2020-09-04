@@ -12,6 +12,7 @@
 #include <mpi.h>
 #include <boost/geometry.hpp>
 #include <median.hpp>
+#include <yalbb/parallel_utils.hpp>
 
 namespace orb {
     using Real = float;

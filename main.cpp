@@ -31,30 +31,35 @@ std::pair<array<Real, N>, array<Real, N>> get_dimension_size(vector<T>& p, GetPo
     return { max_by_dim, min_by_dim };
 }
 template<int N> using Subdomain = std::array<Real, 2*N>;
-
 template<int N>
 struct ORBBalancer {
-
-    const MPI_Comm comm;	
-    
-    ORBBalancer(MPI_Comm comm = MPI_COMM_WORLD): comm(comm){}
-
     typedef boost::geometry::model::point<Real, N, boost::geometry::cs::cartesian> point_t;
     typedef boost::geometry::model::box<point_t> box_t;
+
+    MPI_Datatype datatype;
+    MPI_Comm comm;
+    int nbProcessors;
+    int myRank;
+    std::vector<Subdomain<N>> partitions;
+
+    explicit ORBBalancer(MPI_Datatype datatype, MPI_Comm comm = MPI_COMM_WORLD): datatype(datatype), comm(comm){
+        MPI_Comm_size(comm, &nbProcessors);
+        MPI_Comm_rank(comm, &myRank);
+    }
+
     inline point_t array_to_point(const std::array<Real, N>& pos) {
         if constexpr(N==3)
             return point_t(pos.at(0), pos.at(1), pos.at(2));
         else
             return point_t(pos.at(0), pos.at(1));
     }
-    inline box_t domain_to_box(const Subdomain<N>& domain){
+    inline box_t   domain_to_box(const Subdomain<N>& domain) {
         if constexpr(N==3)
             return box_t(point_t(domain.at(0), domain.at(2), domain.at(3)), point_t(domain.at(1), domain.at(3), domain.at(5)));
         else
             return box_t(point_t(domain.at(0), domain.at(2)), point_t(domain.at(1), domain.at(3)));
     }
 
-    std::vector<Subdomain<N>> partitions;
     void lookup_domain(const point_t& p, int* PE) {
         for((*PE) = partitions.size()-1; (*PE) > -1; (*PE)--) {
             if (boost::geometry::covered_by(p, domain_to_box(partitions.at((*PE))))) return;
@@ -72,10 +77,18 @@ struct ORBBalancer {
         auto point = array_to_point(pos);
         lookup_domain(point, PE);
     }
+    void lookup_domain(Real x, Real y, Real z, int* PE) {
+        if constexpr(N==3)
+            lookup_domain(point_t(x,y,z), PE);
+        else
+            lookup_domain(point_t(x,y), PE);
+    }
+
     template<class T, class GetPosF>
     void lookup_domain(T* p, int* PE, GetPosF getPosition) {
         lookup_domain(getPosition(p), PE);
     }
+
     std::vector<int> get_neighbors(int PE, double min_distance) {
         int worldsize;
         std::vector<int> neighbors;
@@ -90,13 +103,18 @@ struct ORBBalancer {
         return neighbors;
     }
 };
-
 template<int N, class T, class GetPosF>
-void orb(ORBBalancer<N>& lb, vector<T>& elements, Subdomain<N> box, unsigned int P, GetPosF getPosition, MPI_Datatype datatype, MPI_Comm comm) {
+void orb(ORBBalancer<N>& lb, vector<T>& elements, GetPosF getPosition) {
+    auto datatype = lb.datatype;
+    auto comm     = lb.comm;
     const size_t size   = elements.size();
     const size_t nparts = size / N;
-
-    auto ncuts = std::log(P) / std::log(2);
+    auto ncuts = std::log(lb.nbProcessors) / std::log(2);
+    Subdomain<N> box;
+    for(int dim = 0; dim < N; ++dim) {
+        box.at(2*dim)   = std::numeric_limits<Real>::lowest();
+        box.at(2*dim+1) = std::numeric_limits<Real>::max();
+    }
     std::vector< Subdomain<N> > domains;
     std::vector< std::vector<T>  > domains_data { std::move(elements) };
     domains.emplace_back( box );
@@ -135,7 +153,6 @@ void orb(ORBBalancer<N>& lb, vector<T>& elements, Subdomain<N> box, unsigned int
         domains_data = std::move(subdomains_data);
     }
     do_migration<T>(0, elements, domains_data, datatype, comm);
-
     lb.partitions = domains;
 }
 
@@ -151,7 +168,6 @@ struct Particle {
     }
 
 };
-
 #include <random>
 #include <cstdlib>
 template<int N>
@@ -166,6 +182,13 @@ struct RandomParticleGenerator {
                                 (Real) std::rand() / RAND_MAX}};
     }
 };
+template<int N>
+struct ParticlePositionGetter {
+    std::array<Real, N>* operator()(Particle<N>* p){
+        return &p->position;
+    }
+};
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     int worldsize,r;
@@ -175,7 +198,7 @@ int main(int argc, char** argv) {
 
     using Particle = Particle<2>;
 
-    ORBBalancer<Particle::ndim> lb(MPI_COMM_WORLD);
+
 
     std::vector<Particle> particles( r == 1? 0 : 20000 );
 
@@ -183,9 +206,10 @@ int main(int argc, char** argv) {
     MPI_Type_contiguous(Particle::ndim, par::get_mpi_type<Real>(), &particle_datatype);
     MPI_Type_commit(&particle_datatype);
 
+    ORBBalancer<Particle::ndim> lb(particle_datatype, MPI_COMM_WORLD);
     generate(begin(particles), end(particles), RandomParticleGenerator<Particle::ndim>());
 
-    orb<Particle::ndim>(lb, particles, {0.0, 1.0, 0.0,1.0}, worldsize, [](Particle* p){ return &p->position;}, particle_datatype, MPI_COMM_WORLD);
+    orb<Particle::ndim>(lb, particles,  [](Particle* p){ return &p->position;});
 
     std::ofstream f;
     f.open(std::to_string(r) + ".particles");
@@ -197,6 +221,7 @@ int main(int argc, char** argv) {
 
     /* lookup the domain belonging to a particle */
     int p;
+
     lb.lookup_domain( ORBBalancer<Particle::ndim>::point_t(0.00, 0.00), &p);
     lb.lookup_domain( &particles[0], &p, [](Particle* p){ return &p->position;});
 

@@ -39,6 +39,8 @@ namespace orb {
 
     template<int N> using Subdomain = std::array<Real, 2 * N>;
 
+
+
     template<int N>
     struct ORBBalancer {
         typedef boost::geometry::model::point<Real, N, boost::geometry::cs::cartesian> point_t;
@@ -117,6 +119,20 @@ namespace orb {
             return neighbors;
         }
     };
+
+    template<int N>
+    ORBBalancer<N>* ORBBalancer_create_ptr_from(ORBBalancer<N>* orb){
+        auto *cpy_orb = new ORBBalancer<N>(orb->datatype, orb->comm);
+        cpy_orb->nbProcessors = orb->nbProcessors;
+        cpy_orb->myRank = orb->myRank;
+        cpy_orb->partitions = orb->partitions;
+        return cpy_orb;
+    }
+
+    template<int N>
+    void ORBBalancer_destroy(ORBBalancer<N>* orb) {
+        delete orb;
+    }
 
     template<int N, class T, class GetPosF, class MigrationFunction>
     void parallel_orb(ORBBalancer<N> &lb, std::vector <T> &elements, GetPosF getPosition, MigrationFunction do_migration) {

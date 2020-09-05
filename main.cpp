@@ -61,9 +61,11 @@ int main(int argc, char** argv) {
     MPI_Type_commit(&particle_datatype);
 
     ORBBalancer<Particle::ndim> lb(particle_datatype, MPI_COMM_WORLD);
-    generate(begin(particles), end(particles), RandomParticleGenerator<Particle::ndim>());
 
-    parallel_orb<Particle::ndim>(lb, particles,  [](Particle* p){ return &p->position;}, do_migration<Particle>);
+    auto *cpy = ORBBalancer_create_ptr_from(&lb);
+
+    generate(begin(particles), end(particles), RandomParticleGenerator<Particle::ndim>());
+    parallel_orb<Particle::ndim>(*cpy, particles,  [](Particle* p){ return &p->position;}, do_migration<Particle>);
 
     std::ofstream f;
     f.open(std::to_string(r) + ".particles");
@@ -71,13 +73,15 @@ int main(int argc, char** argv) {
     f.close();
 
     /* get neighbors closer than 0.1 */
-    auto neigh = lb.get_neighbors(r, 0.1);
+    auto neigh = cpy->get_neighbors(r, 0.1);
 
     /* lookup the domain belonging to a particle */
     int p;
 
-    lb.lookup_domain( ORBBalancer<Particle::ndim>::point_t(0.00, 0.00), &p);
-    lb.lookup_domain( &particles[0], &p, [](Particle* p){ return &p->position;});
+    cpy->lookup_domain( ORBBalancer<Particle::ndim>::point_t(0.00, 0.00), &p);
+    cpy->lookup_domain( &particles[0], &p, [](Particle* p){ return &p->position;});
+
+    ORBBalancer_destroy(cpy);
 
     MPI_Finalize();
     return 0;
